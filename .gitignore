@@ -1,0 +1,16 @@
+# Secretos (nunca se suben; usar .env.example como referencia)
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / sistema
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+evidencia/
