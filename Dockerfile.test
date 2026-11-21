@@ -1,0 +1,11 @@
+# Imagen para correr las pruebas. Parte de la imagen de la API que construye
+# Jenkins y le agrega pytest y la carpeta tests.
+ARG IMAGEN_API=citas-api
+FROM ${IMAGEN_API}
+
+COPY requirements-test.txt requirements.txt ./
+RUN pip install --no-cache-dir -r requirements-test.txt
+
+COPY tests ./tests
+
+CMD ["python", "-m", "pytest", "-v", "--junitxml=/code/reportes/pruebas.xml"]
