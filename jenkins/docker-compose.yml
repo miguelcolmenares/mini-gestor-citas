@@ -1,0 +1,19 @@
+# Levanta Jenkins en http://localhost:8080
+# Uso (desde la carpeta jenkins/):  docker compose up -d --build
+services:
+  jenkins:
+    build: .
+    image: citas-jenkins
+    container_name: citas-jenkins
+    # Se usa root solo para que Jenkins pueda usar el socket de Docker del
+    # computador. Es aceptable para un laboratorio, no para producción.
+    user: root
+    ports:
+      - "8080:8080"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  jenkins-home:
