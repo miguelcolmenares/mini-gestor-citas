@@ -12,7 +12,13 @@ mini-gestor-citas/
 │   ├── main.py           # endpoints de la API (FastAPI)
 │   └── database.py       # conexión a PostgreSQL y modelo Cita
 ├── scripts/              # ejemplos de citas y script que ejecuta todas las fases
+├── tests/                # pruebas de la API (pytest)
+├── jenkins/              # imagen de Jenkins con Docker CLI y plugins
+├── docs/                 # documento de implementación de Jenkins
 ├── requirements.txt      # dependencias de Python
+├── requirements-test.txt # dependencias de pruebas y lint
+├── ruff.toml             # reglas del lint
+├── Jenkinsfile           # pipeline de integración continua
 ├── Dockerfile            # imagen propia de la API
 ├── docker-compose.yml    # API + PostgreSQL con un solo comando
 ├── .env.example          # variables de entorno de ejemplo
@@ -36,8 +42,9 @@ Jenkins corre en su propio contenedor y usa el Docker del computador para constr
 1. **Verificar herramientas**: versiones de Docker, Docker Compose y el último commit.
 2. **Construir imagen de la API**: `docker build` con el `Dockerfile` de la Entrega 1.
 3. **Validar docker-compose.yml**: revisa que el archivo de Compose siga siendo válido.
-4. **Levantar base de datos de prueba**: un PostgreSQL temporal en una red de Docker propia de esa ejecución.
-5. **Pruebas**: corre `pytest` (carpeta `tests/`) contra esa base de datos, conectándose por el nombre del contenedor. Jenkins guarda el reporte de las pruebas.
+4. **Calidad de código (lint)**: construye la imagen de pruebas y revisa el código con [ruff](https://docs.astral.sh/ruff/) (errores, estilo PEP 8 y orden de imports, según `ruff.toml`). Si encuentra problemas, el pipeline se detiene.
+5. **Levantar base de datos de prueba**: un PostgreSQL temporal en una red de Docker propia de esa ejecución.
+6. **Pruebas**: corre `pytest` (carpeta `tests/`) contra esa base de datos, conectándose por el nombre del contenedor. Mide la **cobertura** con `pytest-cov` y falla si baja del 80 %. Jenkins guarda el reporte de las pruebas (JUnit) y el de cobertura (`reportes/cobertura.xml`, en los artefactos de la ejecución).
 
 Al final se borran los contenedores, la red y las imágenes de esa ejecución, pase o falle. Los nombres llevan el número de ejecución, así que no chocan con los contenedores de desarrollo (`citas-api`, `citas-db`).
 
@@ -63,13 +70,24 @@ Abrir http://localhost:8080, pegar la contraseña, instalar los plugins sugerido
 
 Como Jenkins corre en un computador local, GitHub no le puede avisar con un webhook. Por eso el `Jenkinsfile` tiene `pollSCM('H/5 * * * *')`: Jenkins revisa el repositorio cada 5 minutos y, si hay commits nuevos, ejecuta el pipeline solo.
 
+## Calidad de código y cobertura (Entrega 3)
+
+- `tests/test_api.py`: flujo principal de la API (crear, consultar, listar, 404).
+- `tests/test_validaciones.py`: datos inválidos (campos vacíos, faltantes o demasiado largos, fecha inválida, id no numérico), orden del listado, `/health` con la base de datos caída y los reintentos de conexión al arrancar.
+- `ruff.toml`: reglas del lint que corre el pipeline.
+
+En total son 18 pruebas y cubren el 100 % del código de `app/`.
+
+El documento con las características requeridas para la implementación de Jenkins está en `docs/`.
+
 ### Correr las pruebas sin Jenkins
 
 Con la base de datos de la Entrega 1 corriendo (`docker compose up -d db`):
 
 ```bash
 pip install -r requirements-test.txt
-python -m pytest -v
+ruff check .
+python -m pytest -v --cov=app --cov-report=term-missing
 ```
 
 Las pruebas usan la `DATABASE_URL` de `localhost`. Si en el `.env` se cambió la clave, exportar antes `DATABASE_URL` con esos valores.

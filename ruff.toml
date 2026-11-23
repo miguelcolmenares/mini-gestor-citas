@@ -1,0 +1,8 @@
+# Configuración del análisis estático (lint) que corre el pipeline de Jenkins.
+line-length = 100
+target-version = "py312"
+
+[lint]
+# E/W: estilo PEP 8, F: errores (imports sin usar, variables no definidas...),
+# I: orden de los imports.
+select = ["E", "F", "W", "I"]

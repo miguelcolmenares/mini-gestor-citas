@@ -1,11 +1,17 @@
-# Imagen para correr las pruebas. Parte de la imagen de la API que construye
-# Jenkins y le agrega pytest y la carpeta tests.
+# Imagen para correr el lint y las pruebas. Parte de la imagen de la API que
+# construye Jenkins y le agrega pytest, pytest-cov, ruff y la carpeta tests.
 ARG IMAGEN_API=citas-api
 FROM ${IMAGEN_API}
 
 COPY requirements-test.txt requirements.txt ./
 RUN pip install --no-cache-dir -r requirements-test.txt
 
+COPY ruff.toml ./
 COPY tests ./tests
 
-CMD ["python", "-m", "pytest", "-v", "--junitxml=/code/reportes/pruebas.xml"]
+# Pruebas con reporte JUnit y de cobertura. Falla si la cobertura baja del 80 %.
+CMD ["python", "-m", "pytest", "-v", \
+     "--junitxml=/code/reportes/pruebas.xml", \
+     "--cov=app", "--cov-report=term-missing", \
+     "--cov-report=xml:/code/reportes/cobertura.xml", \
+     "--cov-fail-under=80"]
