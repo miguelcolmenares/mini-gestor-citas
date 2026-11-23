@@ -1,6 +1,7 @@
-// Pipeline de integración continua del Mini Gestor de Citas (Entrega 2).
+// Pipeline de integración continua del Mini Gestor de Citas (Entregas 2 y 3).
 // Cada ejecución construye la imagen de la API, levanta una base de datos
-// PostgreSQL temporal, corre las pruebas contra ella y al final borra todo.
+// PostgreSQL temporal, revisa la calidad del código (lint), corre las pruebas
+// con cobertura contra ella y al final borra todo.
 pipeline {
     agent any
 
@@ -53,6 +54,15 @@ pipeline {
             }
         }
 
+        stage('Calidad de código (lint)') {
+            steps {
+                // Construye la imagen de pruebas (API + pytest + ruff) y revisa
+                // el código con ruff: errores, estilo PEP 8 y orden de imports.
+                sh 'docker build -f Dockerfile.test --build-arg IMAGEN_API="$IMAGEN_API" -t "$IMAGEN_TEST" .'
+                sh 'docker run --rm "$IMAGEN_TEST" ruff check .'
+            }
+        }
+
         stage('Levantar base de datos de prueba') {
             steps {
                 // Por si una ejecución anterior se cortó y dejó restos.
@@ -78,7 +88,8 @@ pipeline {
 
         stage('Pruebas') {
             steps {
-                sh 'docker build -f Dockerfile.test --build-arg IMAGEN_API="$IMAGEN_API" -t "$IMAGEN_TEST" .'
+                // La imagen de pruebas ya se construyó en la etapa de lint.
+                // Además de las pruebas mide la cobertura y exige mínimo 80 %.
                 // La API de las pruebas se conecta a la BD por el nombre del
                 // contenedor, igual que en la Entrega 1.
                 sh '''
@@ -89,9 +100,10 @@ pipeline {
             }
             post {
                 always {
-                    // Copia el reporte de pytest para que Jenkins muestre los resultados.
-                    sh 'mkdir -p reportes && docker cp "$PRUEBAS":/code/reportes/pruebas.xml reportes/ || true'
+                    // Copia los reportes de pytest: resultados (JUnit) y cobertura.
+                    sh 'mkdir -p reportes && docker cp "$PRUEBAS":/code/reportes/. reportes/ || true'
                     junit allowEmptyResults: true, testResults: 'reportes/pruebas.xml'
+                    archiveArtifacts artifacts: 'reportes/cobertura.xml', allowEmptyArchive: true
                 }
             }
         }
@@ -108,7 +120,7 @@ pipeline {
             '''
         }
         success {
-            echo 'Integración exitosa: la imagen se construyó y todas las pruebas pasaron.'
+            echo 'Integración exitosa: la imagen se construyó, el código pasó el lint y todas las pruebas pasaron.'
         }
         failure {
             echo 'La integración falló. Revisar la etapa en rojo y los resultados de las pruebas.'
