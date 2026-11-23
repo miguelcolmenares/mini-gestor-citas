@@ -70,7 +70,7 @@ Abrir http://localhost:8080, pegar la contraseña, instalar los plugins sugerido
 
 Como Jenkins corre en un computador local, GitHub no le puede avisar con un webhook. Por eso el `Jenkinsfile` tiene `pollSCM('H/5 * * * *')`: Jenkins revisa el repositorio cada 5 minutos y, si hay commits nuevos, ejecuta el pipeline solo.
 
-## Calidad de código y cobertura (Entrega 3)
+## Calidad de código y cobertura (Entrega 2)
 
 - `tests/test_api.py`: flujo principal de la API (crear, consultar, listar, 404).
 - `tests/test_validaciones.py`: datos inválidos (campos vacíos, faltantes o demasiado largos, fecha inválida, id no numérico), orden del listado, `/health` con la base de datos caída y los reintentos de conexión al arrancar.
