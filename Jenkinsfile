@@ -1,7 +1,8 @@
 // Pipeline de integración continua del Mini Gestor de Citas (Entregas 2 y 3).
 // Cada ejecución construye la imagen de la API, levanta una base de datos
 // PostgreSQL temporal, revisa la calidad del código (lint), corre las pruebas
-// con cobertura contra ella y al final borra todo.
+// con cobertura contra ella, arranca el contenedor real de la API para una
+// prueba de humo y al final borra todo.
 pipeline {
     agent any
 
@@ -26,6 +27,7 @@ pipeline {
         RED         = "citas-ci-net-${env.BUILD_NUMBER}"
         DB          = "citas-ci-db-${env.BUILD_NUMBER}"
         PRUEBAS     = "citas-ci-pruebas-${env.BUILD_NUMBER}"
+        API         = "citas-ci-api-${env.BUILD_NUMBER}"
         // Credenciales solo para la base de datos temporal de las pruebas.
         POSTGRES_USER     = 'citas_ci'
         POSTGRES_PASSWORD = 'citas_ci'
@@ -66,7 +68,7 @@ pipeline {
         stage('Levantar base de datos de prueba') {
             steps {
                 // Por si una ejecución anterior se cortó y dejó restos.
-                sh 'docker rm -f "$PRUEBAS" "$DB" >/dev/null 2>&1 || true; docker network rm "$RED" >/dev/null 2>&1 || true'
+                sh 'docker rm -f "$PRUEBAS" "$API" "$DB" >/dev/null 2>&1 || true; docker network rm "$RED" >/dev/null 2>&1 || true'
                 sh 'docker network create "$RED"'
                 sh '''
                     docker run -d --name "$DB" --network "$RED" \
@@ -107,20 +109,42 @@ pipeline {
                 }
             }
         }
+
+        stage('Prueba de humo') {
+            steps {
+                // Las pruebas anteriores usan el cliente de pruebas de FastAPI; aquí se
+                // arranca el contenedor real de la API (la imagen de la etapa 2, con
+                // uvicorn) conectado a la base de datos temporal y, desde otro contenedor
+                // de la misma red, se comprueba que responde: /health y crear y consultar
+                // una cita (scripts/prueba_humo.py, que se envía por la entrada estándar).
+                sh '''
+                    docker run -d --name "$API" --network "$RED" \
+                      -e DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@$DB:5432/$POSTGRES_DB" \
+                      "$IMAGEN_API"
+                '''
+                sh 'docker run --rm -i --network "$RED" "$IMAGEN_API" python - "http://$API:8000" < scripts/prueba_humo.py'
+            }
+            post {
+                failure {
+                    // Si algo falla, los logs de la API muestran por qué no arrancó.
+                    sh 'docker logs "$API" || true'
+                }
+            }
+        }
     }
 
     post {
         always {
             // Limpieza: se borra todo lo que se creó en esta ejecución.
             sh '''
-                docker rm -f "$PRUEBAS" "$DB" || true
+                docker rm -f "$PRUEBAS" "$API" "$DB" || true
                 docker network rm "$RED" || true
                 docker rmi "$IMAGEN_TEST" "$IMAGEN_API" || true
                 rm -f .env
             '''
         }
         success {
-            echo 'Integración exitosa: la imagen se construyó, el código pasó el lint y todas las pruebas pasaron.'
+            echo 'Integración exitosa: la imagen se construyó, el código pasó el lint, todas las pruebas pasaron y el contenedor de la API respondió la prueba de humo.'
         }
         failure {
             echo 'La integración falló. Revisar la etapa en rojo y los resultados de las pruebas.'
