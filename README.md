@@ -11,7 +11,7 @@ mini-gestor-citas/
 ├── app/
 │   ├── main.py           # endpoints de la API (FastAPI)
 │   └── database.py       # conexión a PostgreSQL y modelo Cita
-├── scripts/              # ejemplos de citas y script que ejecuta todas las fases
+├── scripts/              # ejemplos de citas, script de todas las fases y prueba de humo
 ├── tests/                # pruebas de la API (pytest)
 ├── jenkins/              # imagen de Jenkins con Docker CLI y plugins
 ├── docs/                 # documento de implementación de Jenkins
@@ -45,6 +45,7 @@ Jenkins corre en su propio contenedor y usa el Docker del computador para constr
 4. **Calidad de código (lint)**: construye la imagen de pruebas y revisa el código con [ruff](https://docs.astral.sh/ruff/) (errores, estilo PEP 8 y orden de imports, según `ruff.toml`). Si encuentra problemas, el pipeline se detiene.
 5. **Levantar base de datos de prueba**: un PostgreSQL temporal en una red de Docker propia de esa ejecución.
 6. **Pruebas**: corre `pytest` (carpeta `tests/`) contra esa base de datos, conectándose por el nombre del contenedor. Mide la **cobertura** con `pytest-cov` y falla si baja del 80 %. Jenkins guarda el reporte de las pruebas (JUnit) y el de cobertura (`reportes/cobertura.xml`, en los artefactos de la ejecución).
+7. **Prueba de humo**: arranca el contenedor real de la API (la imagen de la etapa 2, con uvicorn) conectado a la base de datos temporal y, desde otro contenedor de la misma red, ejecuta `scripts/prueba_humo.py`: espera a que `/health` responda y luego crea y consulta una cita. Si falla, muestra los logs de la API.
 
 Al final se borran los contenedores, la red y las imágenes de esa ejecución, pase o falle. Los nombres llevan el número de ejecución, así que no chocan con los contenedores de desarrollo (`citas-api`, `citas-db`).
 
@@ -114,6 +115,9 @@ Las pruebas usan la `DATABASE_URL` de `localhost`. Si en el `.env` se cambió la
 | 4 | **Calidad de código (lint)** *(nueva)* | Construye la imagen de pruebas y ejecuta `ruff check .`. | Hay errores o problemas de estilo. |
 | 5 | Levantar base de datos de prueba | PostgreSQL 17 temporal en una red propia de la ejecución. | La base de datos no arranca en 60 s. |
 | 6 | Pruebas *(con cobertura)* | `pytest` contra la base de datos, con reportes JUnit y de cobertura. | Falla alguna prueba o la cobertura baja del 80 %. |
+| 7 | **Prueba de humo** *(nueva)* | Arranca el contenedor real de la API y ejecuta `scripts/prueba_humo.py` desde otro contenedor de la red. | La API no responde en 60 s o una respuesta no es la esperada. |
+
+Las pruebas de la etapa 6 usan el cliente de pruebas de FastAPI dentro de la imagen de pruebas, así que nunca arrancan la API con uvicorn. La prueba de humo cubre ese hueco: comprueba que la imagen que se entregaría arranca, se conecta a PostgreSQL por el nombre del contenedor y responde por la red.
 
 ### Compuertas de calidad
 
@@ -143,4 +147,12 @@ python -m pytest -v --cov=app --cov-report=term-missing --cov-fail-under=80
 ```
 
 Las pruebas usan la `DATABASE_URL` de `localhost`. Si en el `.env` se cambió la clave, exportar antes `DATABASE_URL` con esos valores.
+
+### Correr la prueba de humo sin Jenkins
+
+Con el proyecto levantado (`docker compose up -d --build`), la misma prueba de humo revisa la API publicada en el puerto 8000:
+
+```bash
+python scripts/prueba_humo.py http://localhost:8000
+```
 
